@@ -1,5 +1,5 @@
 # RpcDemo
-一个简单地基于HTTP实现的rpc demo, 包含客户端和服务端
+一个基于HTTP实现的简单rpc demo, 包含客户端和服务端
 
 ### 原理
 #### 服务端  
