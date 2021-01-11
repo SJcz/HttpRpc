@@ -13,3 +13,16 @@ export interface IPromiseReturn {
     /**处理成功时的返回数据 */
     data?: any;
 }
+
+declare global {
+    interface RpcModule {
+        
+    }
+    type RemoterClass<T> = {
+        [P in keyof T]?: RemoterProxyWithPromise;
+    };
+
+    interface RemoterProxyWithPromise {
+        (...args: any[]): Promise<any>;
+    }
+}

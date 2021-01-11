@@ -1,11 +1,13 @@
 import { IModuleIntroduce, IPromiseReturn } from './lib/Define';
 import { promiseRequest } from './lib/Util';
+import { ClientProxy } from './proxy';
 
 export class RpcClient {
     private rpcModuleMap: { [moduleName: string]: IModuleIntroduce } = {};
     private static instance: RpcClient | null = null;
     private isInitializing = false;
     private rpcServerUrl = '';
+    public rpc: RpcModule = {};
     constructor() {
         // 无论是使用 getInstance 还是 new 创建，保证都是同一个对象
         if (!RpcClient.instance) {
@@ -21,9 +23,10 @@ export class RpcClient {
         return RpcClient.instance;
     }
 
-    init (url: string): RpcClient {
+    initClient (url: string): RpcClient {
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         const self = this;
+        this.rpc = {};
         this.isInitializing = true;
         if (!url) {
             this.isInitializing = false;
@@ -35,19 +38,28 @@ export class RpcClient {
             method: 'POST'
         }).then((result: IPromiseReturn) => {
             this.isInitializing = false;
-            if (result.statusCode !== 1) {
-                return console.warn(`RpcClient: Can not get correct respose from RpcServer: ${self.rpcServerUrl} when reqeust module-method-list`);
-            }
-            if (result.statusCode === 1) {
+            if (result.statusCode !== 200) {
+                console.error(`RpcClient: Can not get correct respose from RpcServer: ${self.rpcServerUrl} when reqeust module-method-list`);
+                return;
+            } else {
                 self.rpcModuleMap = result.data;
-                console.log(`RpcClient: Get rpc module-method-list success: ${typeof result.data}`);
+                self.initProxy();
                 console.log(`RpcClient: Get rpc module-method-list success: ${JSON.stringify(result.data)}`);
             }
         }).catch(this.errorHandler);
         return this;
     }
 
-    rpcFunction (moduleName: string, method: string, params: any): Promise<IPromiseReturn> {
+    initProxy(): RpcClient {
+        for (let mod in this.rpcModuleMap) {
+            for (let method of this.rpcModuleMap[mod].methodList) {
+                ClientProxy.genProxy(this, mod, method);
+            }
+        }
+        return this;
+    }
+
+    rpcFunction (moduleName: string, method: string, ...params: any): Promise<IPromiseReturn> {
         if(this.isInitializing) {
             throw new Error('RpcClient: RpcClient is initializing.');
         }
@@ -58,7 +70,7 @@ export class RpcClient {
             throw new Error(`RpcClient: methodList of module ${moduleName} by RpcServer is not an array!!!`);
         }
         if (this.rpcModuleMap[moduleName].methodList.indexOf(method) === -1) {
-            throw new Error(`RpcClient: module ${moduleName} no such function: method`);
+            throw new Error(`RpcClient: module ${moduleName} no such function: ${method}`);
         }
         return promiseRequest({
             url: `${this.rpcServerUrl}/${moduleName}/${method}`,

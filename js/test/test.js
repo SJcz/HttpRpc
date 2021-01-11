@@ -40,12 +40,12 @@ var RpcServer_1 = require("../RpcServer/RpcServer");
 var RpcClient_1 = require("../RpcClient/RpcClient");
 var path = require("path");
 // 启动RPC服务器
-console.log(path.resolve(__dirname, '../remote'));
+// console.log(path.resolve(__dirname, '../remote'));
 RpcServer_1.RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'));
 var rpcClient = RpcClient_1.RpcClient.getInstance();
 // 异步
 function startRpc() {
-    rpcClient.rpcFunction('Test', 'add', { a: 1, b: 2 }).then(function (result) {
+    rpcClient.rpc.Test.add(1, 2).then(function (result) {
         console.log('-------------------------------------');
         console.log('async:', result);
     }).catch(function (e) {
@@ -59,7 +59,7 @@ function startRpcSync() {
         var result;
         return __generator(this, function (_a) {
             switch (_a.label) {
-                case 0: return [4 /*yield*/, rpcClient.rpcFunction('Test', 'add', { a: 1, b: 2 })];
+                case 0: return [4 /*yield*/, rpcClient.rpc.Test.add(1, 2)];
                 case 1:
                     result = _a.sent();
                     console.log('sync:', result);
@@ -69,9 +69,9 @@ function startRpcSync() {
     });
 }
 function startClient() {
-    rpcClient.init('http://localhost:10008');
+    rpcClient.initClient('http://localhost:10008');
     setTimeout(startRpc, 3000);
-    setTimeout(startRpcSync, 3000);
+    setTimeout(startRpcSync, 4000);
 }
 setTimeout(startClient, 3000);
 /*

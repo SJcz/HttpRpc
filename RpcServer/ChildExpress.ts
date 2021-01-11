@@ -3,14 +3,13 @@ import express = require('express');
 import bodyParser = require('body-parser');
 import _ = require('underscore');
 import { IModuleIntroduce } from './lib/Define';
-import { requireModule } from './lib/Util';
 
 /**不是期待的数据类型 */
 const UNEXPTECED_TYPE = 'Unexpected Type';
 /**http服务器 端口 */
 const EXPRESS_PORT = 10008;
 /**子进程返回给主进程启动成功 */
-const SERVER_SUCCESS = 'SUCCESS';
+const SERVER_SUCCESS = '服务器 rpc 路由添加完成';
 /**RPC客户端调用服务端所有rpc模块和方法的路由 */
 const GET_ALL_RPC_METHOD = '/RpcServer/GetAllRpcMethod';
 
@@ -69,30 +68,20 @@ class ChildExpress {
             return;
         }
         // 由于这里无法使用import(namespace和module内部无法使用import), 所以在外面使用import之后再返回回来
-        const modObj = requireModule(moduleIntroduce.filePath);
-        const mod = modObj[moduleName];
-        if (!mod) {
+        const modObj = require(moduleIntroduce.filePath);
+        if (!modObj) {
             console.warn(`RpcServer: require ${moduleIntroduce.filePath}, but can not find ${moduleIntroduce.filePath} when require. `);
             return;
         }
-        // eslint-disable-next-line @typescript-eslint/no-this-alias
-        const self = this;
         for (let method of moduleIntroduce.methodList) {
             console.log(`RpcServer: add route | ${moduleName}/${method} | success`);
-            // 使用这种写法是因为由于路由回调处理函数始终需要使用moduleName 和method这两个变量
-            // 导致addRoute函数执行完毕之后该函数里面所有产生的变量并不会回收(闭包导致)
-            //  使用立即执行函数将这两个变量放入另一个函数内部， addRoute函数执行完毕
-            // 内部所有变量全部被回收
-            (function (parentRoute, subRoute): void {
-                self.app.post(`/${parentRoute}/${subRoute}`, (req, res) => {
-                    //这里需要将body里面参数提取出来，然后依次作为需要运行的方法的参数
-                    //使用拓展运算符
-                    const arguement = _.values(req.body);
-                    const result = mod[method].call(null, ...arguement);
-                    console.log(`get ${parentRoute}/${subRoute} return value=${JSON.stringify(result)}`);
-                    res.json(result);
-                });
-            })(moduleName, method);
+            this.app.post(`/${moduleName}/${method}`, async (req, res) => {
+                // 这里需要将body里面参数提取出来，然后依次作为需要运行的方法的参数, 使用拓展运算符
+                const arguement = _.values(req.body);
+                const result = await modObj[method].call(null, ...arguement);
+                // console.log(`server: ${moduleName}/${method} return value=${JSON.stringify(result)}`);
+                res.json(result);
+            });
         }
 
     }
@@ -123,10 +112,10 @@ class ChildExpress {
     }
 
     onMessage (msgObj: {type: string; rpcModuleMap: { [moduleName: string]: IModuleIntroduce }}): void {
-        console.log('收到父进程消息', msgObj);
+        console.log('收到父进程消息', JSON.stringify(msgObj));
         if (msgObj.type === 'start') {
             this.rpcModuleMap = msgObj.rpcModuleMap;
-            this.initExpress();
+            this.initExpress();                                      
         }
     }
 
