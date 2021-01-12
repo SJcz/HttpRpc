@@ -13,6 +13,12 @@ Note: 目前支持 http 实现 RPC, 有时间增加 websocket 实现
 通过http请求对应路由     
 得到结果  
 
+#### Remote文件
+通过 RpcServer.getInstance().prefix 可以自定义要扫描的 Rpc文件前缀  
+比如设置文件前缀为 RM,  RpcServer.getInstance().prefix('RM'), 那么只会扫描所有的 RMxxx.js 文件.  
+Remote 文件支持 export = xxx, 或者 module.exports = xxx.   
+获取 xxx 身上所有方法来生成对应路由.   
+
 #### 自定义
 使用 RpcServer.getInstance().prefix 查看和设置扫描的rpc文件前缀  
 使用 RpcServer.getInstance().httpPort 查看和设置启动的http端口  
