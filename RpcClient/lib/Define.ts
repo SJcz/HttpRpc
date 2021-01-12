@@ -6,7 +6,7 @@ export interface IModuleIntroduce {
 }
 
 export interface IPromiseReturn {
-    /**处理promise的返回状态码 1位成功 -1为失败*/
+    /**处理promise的返回状态码 200为成功 其他失败*/
     statusCode: number;
     /**当处理promise失败时才会存在, 失败信息 */
     msg?: string;

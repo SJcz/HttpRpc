@@ -4,13 +4,18 @@ import path = require('path');
 
 
 // 启动RPC服务器
-// console.log(path.resolve(__dirname, '../remote'));
 RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'));
 const rpcClient = RpcClient.getInstance();
+async function startClient () {
+    await rpcClient.initClient('http://localhost:10008');
+    await startRpcSync();
+    startRpc()
+}
+startClient();
 
 // 异步
 function startRpc() {
-    rpcClient.rpc.Test.add!(1, 2).then((result) => {
+    rpcClient.rpc.Test.add(1, 2).then((result) => {
         console.log('-------------------------------------');
         console.log('async:', result);
     }).catch((e) => {
@@ -24,14 +29,6 @@ async function startRpcSync() {
     const result  = await rpcClient.rpc.Test.add!(1, 2);
     console.log('sync:', result);
 }
-
-function startClient (): void {
-    rpcClient.initClient('http://localhost:10008');
-    setTimeout(startRpc, 3000);
-    setTimeout(startRpcSync, 4000);
-}
-
-setTimeout(startClient, 3000);
 
 
 /*

@@ -2,20 +2,19 @@
 import express = require('express');
 import bodyParser = require('body-parser');
 import _ = require('underscore');
-import { IModuleIntroduce } from './lib/Define';
+import { IModuleIntroduce, IProcessMsg, IProcessStartMsg } from './lib/Define';
 
-/**不是期待的数据类型 */
-const UNEXPTECED_TYPE = 'Unexpected Type';
-/**http服务器 端口 */
-const EXPRESS_PORT = 10008;
 /**子进程返回给主进程启动成功 */
 const SERVER_SUCCESS = '服务器 rpc 路由添加完成';
-/**RPC客户端调用服务端所有rpc模块和方法的路由 */
-const GET_ALL_RPC_METHOD = '/RpcServer/GetAllRpcMethod';
 
 class ChildExpress {
     private app: express.Application = {} as express.Application;
+    private ws: WebSocket;
     private rpcModuleMap: { [moduleName: string]: IModuleIntroduce } = {};
+    /**http服务器 端口, 主线程传递 */
+    private port;
+    /**RPC客户端调用服务端所有rpc模块和方法的路由 主线程传递*/
+    private getAllRpcMethodRoute;
     constructor () {
         this.app = express();
         this.app.use(bodyParser.json());
@@ -27,10 +26,13 @@ class ChildExpress {
     }
 
     initProcess (): void {
-        console.log('RpcServer: intialize process message | disconnect | exit events');
+        console.log('RpcServer: intialize child process message | uncaughtException | exit events');
         process.on('message', this.onMessage.bind(this));
-        process.on('disconnect', this.onDisconnect.bind(this));
         process.on('exit', this.onExit.bind(this));
+        process.on('uncaughtException', (err: Error) => {
+            console.log(err);
+            process.exit(1);
+        })
     }
 
     /**启动express */
@@ -45,18 +47,23 @@ class ChildExpress {
             console.log(`RpcServer: Get a rpc request from IP:${req.ip}, url=${req.url}, params=${JSON.stringify(req.body)}`);
             next();
         });
-        this.app.post(GET_ALL_RPC_METHOD, (req, res) =>{
+        this.app.post(this.getAllRpcMethodRoute, (req, res) =>{
             res.json(this.rpcModuleMap);
         });
         for (let moduleName in this.rpcModuleMap) {
             this.addRoute(moduleName, this.rpcModuleMap[moduleName]);
         }
-        this.app.listen(EXPRESS_PORT, () => {
-            console.log(`RpcServer: server is running in localhost:${EXPRESS_PORT}`);
+        this.app.listen(this.port, () => {
+            console.log(`RpcServer: server is running in localhost:${this.port}`);
             if (process.send) {
-                process.send(SERVER_SUCCESS);
+                process.send({type: 'start', data: SERVER_SUCCESS});
             }
         });
+    }
+
+    initWS(): void {
+        console.log('RpcServer: start initialzing ws');
+        // TODO
     }
 
     addRoute (moduleName: string, moduleIntroduce: IModuleIntroduce): void {
@@ -86,54 +93,25 @@ class ChildExpress {
 
     }
 
-    /**
-     *  一个将任意类型转化为字符串的函数
-     * @param anyObj
-     */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    formatAnyToString (anyObj: any): string {
-        const type = Object.prototype.toString.call(anyObj);
-        switch (type) {
-        case '[object object]':
-            return JSON.stringify(anyObj);
-        case '[object Array]':
-            return JSON.stringify(anyObj);
-        case '[object String]':
-            return anyObj;
-        case '[object Number]':
-            return String(anyObj);
-        case '[object Boolean]':
-            return String(anyObj);
-        default:
-            console.warn(`Get an unexpected type: ${type}, please check your function return`);
-            return UNEXPTECED_TYPE;
-
-        }
-    }
-
-    onMessage (msgObj: {type: string; rpcModuleMap: { [moduleName: string]: IModuleIntroduce }}): void {
-        console.log('收到父进程消息', JSON.stringify(msgObj));
+    onMessage (msgObj: IProcessMsg<IProcessStartMsg>): void {
+        console.log('收到父进程消息', JSON.stringify(msgObj))
         if (msgObj.type === 'start') {
-            this.rpcModuleMap = msgObj.rpcModuleMap;
-            this.initExpress();                                      
+            this.rpcModuleMap = msgObj.data.rpcModuleMap;
+            this.port = msgObj.data.port;
+            this.getAllRpcMethodRoute = msgObj.data.route;
+            if (msgObj.cmd === 'express') {
+                this.initExpress();                                      
+            }
+            if (msgObj.cmd === 'ws') {
+                this.initWS();                                      
+            }
         }
-    }
-
-    onDisconnect (): void {
-        console.log(`process ${process.pid} disconnect.`);
     }
 
     onExit (): void {
         console.log(`process ${process.pid} exit.`);
     }
 }
-
-process.on('uncaughtException', (e: Error) => {
-    console.log(`process ${process.pid} uncaughtException.`);
-    console.log(e.message);
-    console.error();
-    process.exit(1);
-});
 
 
 new ChildExpress().run();

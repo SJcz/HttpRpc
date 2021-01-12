@@ -47,14 +47,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var express = require("express");
 var bodyParser = require("body-parser");
 var _ = require("underscore");
-/**不是期待的数据类型 */
-var UNEXPTECED_TYPE = 'Unexpected Type';
-/**http服务器 端口 */
-var EXPRESS_PORT = 10008;
 /**子进程返回给主进程启动成功 */
 var SERVER_SUCCESS = '服务器 rpc 路由添加完成';
-/**RPC客户端调用服务端所有rpc模块和方法的路由 */
-var GET_ALL_RPC_METHOD = '/RpcServer/GetAllRpcMethod';
 var ChildExpress = /** @class */ (function () {
     function ChildExpress() {
         this.app = {};
@@ -67,10 +61,13 @@ var ChildExpress = /** @class */ (function () {
         this.initProcess();
     };
     ChildExpress.prototype.initProcess = function () {
-        console.log('RpcServer: intialize process message | disconnect | exit events');
+        console.log('RpcServer: intialize child process message | uncaughtException | exit events');
         process.on('message', this.onMessage.bind(this));
-        process.on('disconnect', this.onDisconnect.bind(this));
         process.on('exit', this.onExit.bind(this));
+        process.on('uncaughtException', function (err) {
+            console.log(err);
+            process.exit(1);
+        });
     };
     /**启动express */
     ChildExpress.prototype.initExpress = function () {
@@ -85,18 +82,22 @@ var ChildExpress = /** @class */ (function () {
             console.log("RpcServer: Get a rpc request from IP:" + req.ip + ", url=" + req.url + ", params=" + JSON.stringify(req.body));
             next();
         });
-        this.app.post(GET_ALL_RPC_METHOD, function (req, res) {
+        this.app.post(this.getAllRpcMethodRoute, function (req, res) {
             res.json(_this.rpcModuleMap);
         });
         for (var moduleName in this.rpcModuleMap) {
             this.addRoute(moduleName, this.rpcModuleMap[moduleName]);
         }
-        this.app.listen(EXPRESS_PORT, function () {
-            console.log("RpcServer: server is running in localhost:" + EXPRESS_PORT);
+        this.app.listen(this.port, function () {
+            console.log("RpcServer: server is running in localhost:" + _this.port);
             if (process.send) {
-                process.send(SERVER_SUCCESS);
+                process.send({ type: 'start', data: SERVER_SUCCESS });
             }
         });
+    };
+    ChildExpress.prototype.initWS = function () {
+        console.log('RpcServer: start initialzing ws');
+        // TODO
     };
     ChildExpress.prototype.addRoute = function (moduleName, moduleIntroduce) {
         var _this = this;
@@ -138,48 +139,23 @@ var ChildExpress = /** @class */ (function () {
             _loop_1(method);
         }
     };
-    /**
-     *  一个将任意类型转化为字符串的函数
-     * @param anyObj
-     */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ChildExpress.prototype.formatAnyToString = function (anyObj) {
-        var type = Object.prototype.toString.call(anyObj);
-        switch (type) {
-            case '[object object]':
-                return JSON.stringify(anyObj);
-            case '[object Array]':
-                return JSON.stringify(anyObj);
-            case '[object String]':
-                return anyObj;
-            case '[object Number]':
-                return String(anyObj);
-            case '[object Boolean]':
-                return String(anyObj);
-            default:
-                console.warn("Get an unexpected type: " + type + ", please check your function return");
-                return UNEXPTECED_TYPE;
-        }
-    };
     ChildExpress.prototype.onMessage = function (msgObj) {
         console.log('收到父进程消息', JSON.stringify(msgObj));
         if (msgObj.type === 'start') {
-            this.rpcModuleMap = msgObj.rpcModuleMap;
-            this.initExpress();
+            this.rpcModuleMap = msgObj.data.rpcModuleMap;
+            this.port = msgObj.data.port;
+            this.getAllRpcMethodRoute = msgObj.data.route;
+            if (msgObj.cmd === 'express') {
+                this.initExpress();
+            }
+            if (msgObj.cmd === 'ws') {
+                this.initWS();
+            }
         }
-    };
-    ChildExpress.prototype.onDisconnect = function () {
-        console.log("process " + process.pid + " disconnect.");
     };
     ChildExpress.prototype.onExit = function () {
         console.log("process " + process.pid + " exit.");
     };
     return ChildExpress;
 }());
-process.on('uncaughtException', function (e) {
-    console.log("process " + process.pid + " uncaughtException.");
-    console.log(e.message);
-    console.error();
-    process.exit(1);
-});
 new ChildExpress().run();

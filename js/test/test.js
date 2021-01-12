@@ -40,9 +40,25 @@ var RpcServer_1 = require("../RpcServer/RpcServer");
 var RpcClient_1 = require("../RpcClient/RpcClient");
 var path = require("path");
 // 启动RPC服务器
-// console.log(path.resolve(__dirname, '../remote'));
 RpcServer_1.RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'));
 var rpcClient = RpcClient_1.RpcClient.getInstance();
+function startClient() {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, rpcClient.initClient('http://localhost:10008')];
+                case 1:
+                    _a.sent();
+                    return [4 /*yield*/, startRpcSync()];
+                case 2:
+                    _a.sent();
+                    startRpc();
+                    return [2 /*return*/];
+            }
+        });
+    });
+}
+startClient();
 // 异步
 function startRpc() {
     rpcClient.rpc.Test.add(1, 2).then(function (result) {
@@ -68,12 +84,6 @@ function startRpcSync() {
         });
     });
 }
-function startClient() {
-    rpcClient.initClient('http://localhost:10008');
-    setTimeout(startRpc, 3000);
-    setTimeout(startRpcSync, 4000);
-}
-setTimeout(startClient, 3000);
 /*
 
 function sleep(time) {

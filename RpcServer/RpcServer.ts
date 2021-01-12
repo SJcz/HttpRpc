@@ -1,28 +1,73 @@
 import path = require('path');
 import fs = require('fs');
-import os = require('os');
 import childProcess = require('child_process');
-import { IModuleIntroduce } from './lib/Define';
+import { IModuleIntroduce, IProcessMsg } from './lib/Define';
+import { isUndefined } from 'underscore';
 
 export class RpcServer {
     public rpcModuleMap: { [moduleName: string]: IModuleIntroduce } = {};
     public scanFiles: Array<string> = [];
     private static instance: RpcServer | null = null;
+    /**启动的http服务器子进程 */
+    private childPro: childProcess.ChildProcess | null = null;
+    /**要扫描的rpc文件的指定文件名前缀 */
     private fileNamePrefix = 'Remote';
-    constructor() {
-        // 无论是使用 getInstance 还是 new 创建，保证都是同一个对象
-        if (!RpcServer.instance) {
-            this.rpcModuleMap = {};
-            RpcServer.instance = this;
-        }
-        return RpcServer.instance;
-    }
+    /**http服务器 端口 */
+    private port = 10008;
+    /**RPC客户端调用服务端所有rpc模块和方法的路由 */
+    private getAllRpcMethodRoute = '/RpcServer/GetAllRpcMethod';
+    /**子进程错误导致异常退出时最大重启次数 */
+    private maxTryTimes = 3;
+    /**已重启次数 */
+    private haveTryTimes = 0;
 
     static getInstance(): RpcServer {
         if (!RpcServer.instance) {
             RpcServer.instance = new RpcServer();
         }
         return RpcServer.instance;
+    }
+
+    /**设置或者获取指定文件前缀 */
+    prefix(prefix?: string): string {
+        if (isUndefined(prefix)) {
+            return this.fileNamePrefix;
+        } else {
+            this.fileNamePrefix = String(prefix);
+            return this.fileNamePrefix;
+        }
+    }
+
+    /**设置或者获取http服务器端口 */
+    httpPort(port?: number): number {
+        if (isUndefined(port)) {
+            return this.port;
+        } else {
+            this.port = Number(port);
+            if (isNaN(this.port)) throw new Error('Server: port must be valid number');
+            return this.port;
+        }
+    }
+
+    /**设置或者获取 RPC客户端调用服务端所有rpc方法的路由  */
+    rpcMethodRoute(route?: string): string {
+        if (isUndefined(route)) {
+            return this.getAllRpcMethodRoute;
+        } else {
+            this.getAllRpcMethodRoute = String(route);
+            return this.getAllRpcMethodRoute;
+        }
+    }
+
+    /**设置或者获取 子进程错误导致异常退出时尝试重启次数 */
+    times(times?: number): number {
+        if (isUndefined(times)) {
+            return this.maxTryTimes;
+        } else {
+            this.maxTryTimes = Number(times);
+            if (isNaN(this.maxTryTimes)) throw new Error('Server: tryTimes must be valid number');
+            return this.maxTryTimes;
+        }
     }
 
     /**
@@ -37,17 +82,16 @@ export class RpcServer {
             throw new Error('please provide absolute path like \\alida\\remote or D:\\remote or /remote ');
         }
         const stats = fs.statSync(folder);
-
         if (!stats.isDirectory()) {
             throw new Error(`initRpcServer: ${folder} is not a valid folder.`);
         }
         this.scanRpcFolder(folder);
         this.generateRpcMethodMap();
-        this.generateExpressRoute();
+        this.startChildProcess();
     }
 
     /**
-     * 扫描指定文件夹下的指定名字和后缀的文件
+     * 扫描指定文件夹下的指定名字和后缀的文件, .js .jsx
      * @param folder
      */
     scanRpcFolder (folder: string): void {
@@ -70,7 +114,6 @@ export class RpcServer {
         }
         for (let filePath of this.scanFiles) {
             const modName = path.basename(filePath).replace(/\.(js)|(jsx)$/, '').substr(this.fileNamePrefix.length);
-            // console.log(modName);
             if (modName === '') {
                 throw new Error(`generateRpcMethodMap: ${filePath} is not a valid rpc file.`);
             }
@@ -102,7 +145,7 @@ export class RpcServer {
             // }());
             // exports.Test = Test;
             // 以上就是TS的对象方法编译之后的js形式, 挂在在函数的原型对象上
-            // 看编译之后的js文件, 通过for in获取的都是该函数对象的key; 如果rpc方法不是静态方法, 那么只有从函数的prototype中获取方法名.
+            // 看编译之后的js文件, 通过for in获取的都是该函数对象的key;
             for (let methodName in modObj) {
                 if (typeof modObj[methodName] === 'function') {
                     this.rpcModuleMap[modName].methodList.push(methodName);
@@ -112,44 +155,45 @@ export class RpcServer {
     }
 
     /**
-     * 根据得到的rpcModuleMap来生成express路由
+     * 启动子进程, 将rpcModuleMap发送到子进程去生成express路由
      */
-    generateExpressRoute (): void {
-        for (let i = 0; i < 1; i++) {
-            // eslint-disable-next-line no-undef
-            const childPro = childProcess.fork(path.resolve(__dirname, './ChildExpress.js'));
-            //console.log(childPro.pid);
-            childPro.send({type: 'start', rpcModuleMap: this.rpcModuleMap});
-            childPro.on('message', this.onMessage.bind(this));
-        }
+    startChildProcess (): void {
+        this.childPro = childProcess.fork(path.resolve(__dirname, './ChildExpress.js'));
+        this.childPro.send({ type: 'start', cmd: 'express', data: {
+            rpcModuleMap: this.rpcModuleMap, 
+            port: this.port, 
+            route: this.getAllRpcMethodRoute
+        }});
+        this.childPro.on('message', this.onMessage.bind(this));
+        this.childPro.on('error', this.onError.bind(this));
+        this.childPro.on('exit', this.onExit.bind(this));
     }
 
-    onMessage (message: string): void {
+    onMessage (message: IProcessMsg<any>): void {
         console.log('收到子进程消息:', message);
     }
 
-
-    /* 读取文件字符串的内容， 用正则找方法名
-    readScanFiles (): void {
-        const regExp = new RegExp(/\s*exports\.([a-zA-Z0-9]+)\s*=\s*([a-zA-Z0-9]+)/);
-        if (this.scanFiles.length === 0) {
-            console.warn('there is no any rpc file provide');
+    onError(err: Error): void {
+        console.log('子进程错误:', err);
+        if (this.childPro && this.childPro.kill) {
+            this.childPro.kill();
         }
-        for (let filePath of this.scanFiles) {
-            const contentStr = fs.readFileSync(filePath, 'utf8');
-            console.log(contentStr);
-            const matchResult = regExp.exec(contentStr);
-            if (!matchResult) {
-                console.warn('please check your rpc file is contain content like \'exports.xxx = xxx\'');
-                continue;
-            }
+        if (++this.haveTryTimes < this.maxTryTimes) {
+            this.startChildProcess();
+        } else {
+            console.error(`Server: 子进程已达最大重启次数, 仍未正常启动`)
         }
     }
-    */
-}
 
-//RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'));
-// const rpcServer = RpcServer.getInstance();
-// rpcServer.initRpcServer(path.resolve(__dirname, '../remote'));
-// console.log(rpcServer.scanFiles);
-// console.log(rpcServer.rpcModuleMap);
+    onExit(code: number): void {
+        console.log('子进程退出:', code);
+        if (this.childPro && this.childPro.kill) {
+            this.childPro.kill();
+        }
+        if (++this.haveTryTimes < this.maxTryTimes) {
+            this.startChildProcess();
+        } else {
+            console.error(`Server: 子进程已达最大重启次数, 仍未正常启动`)
+        }
+    }
+}

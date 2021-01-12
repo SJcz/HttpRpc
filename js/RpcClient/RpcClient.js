@@ -5,14 +5,10 @@ var proxy_1 = require("./proxy");
 var RpcClient = /** @class */ (function () {
     function RpcClient() {
         this.rpcModuleMap = {};
-        this.isInitializing = false;
+        /**是否跟服务器连接成功, 仅在成功获取rpc方法列表才算连接成功 */
+        this.connected = false;
         this.rpcServerUrl = '';
         this.rpc = {};
-        // 无论是使用 getInstance 还是 new 创建，保证都是同一个对象
-        if (!RpcClient.instance) {
-            RpcClient.instance = this;
-        }
-        return RpcClient.instance;
     }
     RpcClient.getInstance = function () {
         if (!RpcClient.instance) {
@@ -20,33 +16,29 @@ var RpcClient = /** @class */ (function () {
         }
         return RpcClient.instance;
     };
-    RpcClient.prototype.initClient = function (url) {
-        var _this = this;
-        // eslint-disable-next-line @typescript-eslint/no-this-alias
+    RpcClient.prototype.initClient = function (url, basicRoute) {
         var self = this;
         this.rpc = {};
-        this.isInitializing = true;
+        basicRoute = basicRoute || '/RpcServer/GetAllRpcMethod';
         if (!url) {
-            this.isInitializing = false;
             throw new Error('RpcClient: You must provide a rpc server url!!!');
         }
         this.rpcServerUrl = url;
-        Util_1.promiseRequest({
-            url: this.rpcServerUrl + '/RpcServer/GetAllRpcMethod',
+        return Util_1.promiseRequest({
+            url: this.rpcServerUrl + basicRoute,
             method: 'POST'
         }).then(function (result) {
-            _this.isInitializing = false;
             if (result.statusCode !== 200) {
                 console.error("RpcClient: Can not get correct respose from RpcServer: " + self.rpcServerUrl + " when reqeust module-method-list");
-                return;
             }
             else {
                 self.rpcModuleMap = result.data;
                 self.initProxy();
+                self.connected = true;
                 console.log("RpcClient: Get rpc module-method-list success: " + JSON.stringify(result.data));
             }
+            return self;
         }).catch(this.errorHandler);
-        return this;
     };
     RpcClient.prototype.initProxy = function () {
         for (var mod in this.rpcModuleMap) {
@@ -62,8 +54,8 @@ var RpcClient = /** @class */ (function () {
         for (var _i = 2; _i < arguments.length; _i++) {
             params[_i - 2] = arguments[_i];
         }
-        if (this.isInitializing) {
-            throw new Error('RpcClient: RpcClient is initializing.');
+        if (!this.connected) {
+            throw new Error('RpcClient: RpcClient is not connected.');
         }
         if (!this.rpcModuleMap[moduleName]) {
             throw new Error("RpcClient: RpcServer not provide module: " + moduleName + ", please comfrim RpcClient initialize success or RpcServer own this module");
@@ -85,9 +77,10 @@ var RpcClient = /** @class */ (function () {
         });
     };
     RpcClient.prototype.errorHandler = function (e) {
-        this.isInitializing = false;
+        this.connected = false;
         console.warn('RpcClient: initialize RpcClient rpcModuleMap failed.');
         console.error(e.stack);
+        return this;
     };
     RpcClient.instance = null;
     return RpcClient;
