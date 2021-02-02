@@ -1,10 +1,14 @@
 "use strict";
-var Test = /** @class */ (function () {
-    function Test() {
-    }
-    Test.prototype.add = function (a, b) {
+class Test {
+    addNumber(a, b) {
         return a + b;
-    };
-    return Test;
-}());
+    }
+    addString(a, b) {
+        return a + b;
+    }
+    addJson(json) {
+        return json;
+    }
+}
 module.exports = new Test();
+//# sourceMappingURL=RemoteTest.js.map

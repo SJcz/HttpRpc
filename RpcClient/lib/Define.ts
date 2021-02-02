@@ -5,13 +5,26 @@ export interface IModuleIntroduce {
     methodList: Array<string>;
 }
 
-export interface IPromiseReturn {
-    /**处理promise的返回状态码 200为成功 其他失败*/
+/**底层协议类型 */
+export enum ProtocolTypes {
+    http = 1,
+    webSocket = 2
+}
+
+export interface ISocketRequestMsg {
+    route: string;
+    body: any;
+    reqId: number;
+    /**该请求完成后的回调 */
+    onSuccess: Function;
+    /**该请求失败后的回调 */
+    onFail: Function;
+}
+
+export interface ISocketResponseMsg {
+    data: any;
+    reqId: number;
     statusCode: number;
-    /**当处理promise失败时才会存在, 失败信息 */
-    msg?: string;
-    /**处理成功时的返回数据 */
-    data?: any;
 }
 
 declare global {

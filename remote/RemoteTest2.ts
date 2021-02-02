@@ -1,6 +1,6 @@
 declare global {
     interface RpcModule {
-        Test2?: RemoterClass<Test2> ;
+        Test2?: RemoterClass<Test2>
     }
 }
 class Test2 {

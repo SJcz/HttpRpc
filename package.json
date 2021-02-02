@@ -4,21 +4,25 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node ./js/test/test.js"
+    "test": "mocha ./js/test/test.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "express": "^4.17.1",
+    "mocha": "^8.2.1",
     "request": "^2.88.0",
-    "underscore": "^1.9.2"
+    "underscore": "^1.9.2",
+    "ws": "^7.4.2"
   },
   "devDependencies": {
     "@types/body-parser": "^1.17.1",
     "@types/express": "^4.17.2",
+    "@types/mocha": "^8.2.0",
     "@types/node": "^13.1.6",
     "@types/request": "^2.48.4",
     "@types/underscore": "^1.9.4",
+    "@types/ws": "^7.4.0",
     "@typescript-eslint/eslint-plugin": "^2.15.0",
     "@typescript-eslint/parser": "^2.15.0",
     "eslint": "^6.8.0",

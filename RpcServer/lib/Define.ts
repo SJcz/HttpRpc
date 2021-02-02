@@ -1,5 +1,3 @@
-import { Router } from "express";
-
 /* eslint-disable @typescript-eslint/interface-name-prefix */
 export interface IModuleIntroduce {
     /**文件绝对路径 */
@@ -10,8 +8,7 @@ export interface IModuleIntroduce {
 
 export interface IProcessMsg<T> {
     type: string;
-    cmd?: string;
-    data?: T
+    data: T
 }
 
 export interface IProcessStartMsg {
@@ -19,15 +16,24 @@ export interface IProcessStartMsg {
         [key: string]: IModuleIntroduce
     };
     port?: number; 
+    protocol?: ProtocolTypes;
     route?: string;
 }
 
-export interface IPromiseReturn {
-    /**处理promise的返回状态码 1位成功 -1为失败*/
-    statusCode: number;
-    /**当处理promise失败时才会存在, 失败信息 */
-    msg?: string;
-    /**处理成功时的返回数据 */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**底层协议类型 */
+export enum ProtocolTypes {
+    http = 1,
+    webSocket = 2
+}
+
+export interface ISocketRequestMsg {
+    route: string;
+    body: any;
+    reqId: number;
+}
+
+export interface ISocketResponseMsg {
     data?: any;
+    reqId: number;
+    statusCode: number;
 }

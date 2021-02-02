@@ -1,7 +1,7 @@
 import path = require('path');
 import fs = require('fs');
 import childProcess = require('child_process');
-import { IModuleIntroduce, IProcessMsg } from './lib/Define';
+import { IModuleIntroduce, IProcessMsg, ProtocolTypes } from './lib/Define';
 import { isUndefined } from 'underscore';
 
 export class RpcServer {
@@ -12,10 +12,14 @@ export class RpcServer {
     private childPro: childProcess.ChildProcess | null = null;
     /**要扫描的rpc文件的指定文件名前缀 */
     private fileNamePrefix = 'Remote';
+    /**底层使用的协议类型 */
+    private protocol = ProtocolTypes.http;
     /**http服务器 端口 */
-    private port = 10008;
+    private httpPort = 10008;
+    /**websocket服务器 端口 */
+    private wsPort = 10009;
     /**RPC客户端调用服务端所有rpc模块和方法的路由 */
-    private getAllRpcMethodRoute = '/RpcServer/GetAllRpcMethod';
+    private getAllRpcMethodRoute = 'RpcServer/GetAllRpcMethod';
     /**子进程错误导致异常退出时最大重启次数 */
     private maxTryTimes = 3;
     /**已重启次数 */
@@ -29,24 +33,40 @@ export class RpcServer {
     }
 
     /**设置或者获取指定文件前缀 */
-    prefix(prefix?: string): string {
+    prefix(prefix?: string): string | RpcServer {
         if (isUndefined(prefix)) {
             return this.fileNamePrefix;
         } else {
             this.fileNamePrefix = String(prefix);
-            return this.fileNamePrefix;
+            return this;
         }
     }
 
-    /**设置或者获取http服务器端口 */
-    httpPort(port?: number): number {
-        if (isUndefined(port)) {
-            return this.port;
-        } else {
-            this.port = Number(port);
-            if (isNaN(this.port)) throw new Error('Server: port must be valid number');
-            return this.port;
+    /**设置或者获取底层的服务器类型 */
+    serverType(type?: ProtocolTypes): ProtocolTypes | RpcServer {
+        if (isUndefined(type)) {
+            return this.protocol;
+        } 
+        if (!ProtocolTypes[type]) {
+            throw new Error(`Server: type=${type}, type must be element in ${ProtocolTypes}`);
         }
+        this.protocol = type;
+        return this;
+    } 
+
+    /**设置或者获取服务器端口 */
+    port(port?: number): number | RpcServer {
+        if (isUndefined(port)) {
+            return this.protocol == ProtocolTypes.http ? this.httpPort : this.wsPort;
+        }
+        if (isNaN(port) || port > 65535 || port < 1024) throw new Error('Server: port must be valid number(1024 - 65535)');
+        if (this.protocol == ProtocolTypes.http) {
+            this.httpPort = port;
+        } 
+        if (this.protocol == ProtocolTypes.webSocket) {
+            this.wsPort = port;
+        } 
+        return this;
     }
 
     /**设置或者获取 RPC客户端调用服务端所有rpc方法的路由  */
@@ -72,12 +92,13 @@ export class RpcServer {
 
     /**
      * 传入的路径应该是一个绝对路径
-     * @param folder please provide absolute path
+     * @param folder
      */
-    initRpcServer (folder?: string): void {
+    initRpcServer (folder?: string): RpcServer {
         if (!folder) {
             throw new Error('not specified folder, please specify a basic rpc scan floder');
         }
+        folder = path.resolve(folder);
         if (/^\.+/.test(folder)) {
             throw new Error('please provide absolute path like \\alida\\remote or D:\\remote or /remote ');
         }
@@ -88,6 +109,7 @@ export class RpcServer {
         this.scanRpcFolder(folder);
         this.generateRpcMethodMap();
         this.startChildProcess();
+        return this;
     }
 
     /**
@@ -117,37 +139,15 @@ export class RpcServer {
             if (modName === '') {
                 throw new Error(`generateRpcMethodMap: ${filePath} is not a valid rpc file.`);
             }
-            const modObj = require(filePath);
+            let modObj = require(filePath);
             if (!modObj) {
                 console.warn(`RpcServer: require ${filePath}, but can not find ${filePath} when require. `);
                 continue;
             }
             this.rpcModuleMap[modName] = { filePath: filePath, methodList: [] };
-            // var Test = /** @class */ (function () {
-            //     function Test() {
-            //     }
-            //     Test.add = function (a, b) {
-            //         return a + b;
-            //     };
-            //     return Test;
-            // }());
-            // exports.Test = Test;
-            // 以上就是TS的静态方法编译之后的js形式, 直接挂在在函数对象上
-            // -------------------------------------
-            // Object.defineProperty(exports, "__esModule", { value: true });
-            // var Test = /** @class */ (function () {
-            //     function Test() {
-            //     }
-            //     Test.prototype.add = function (a, b) {
-            //         return a + b;
-            //     };
-            //     return Test;
-            // }());
-            // exports.Test = Test;
-            // 以上就是TS的对象方法编译之后的js形式, 挂在在函数的原型对象上
-            // 看编译之后的js文件, 通过for in获取的都是该函数对象的key;
-            for (let methodName in modObj) {
-                if (typeof modObj[methodName] === 'function') {
+            const names = Object.getOwnPropertyNames(modObj.constructor.prototype); // 因为ES6的类的内部函数无法枚举, 使用该方法获取某个对象的原型的所有属性.
+            for (let methodName of names) {
+                if (typeof modObj[methodName] === 'function' && methodName !== 'constructor') {
                     this.rpcModuleMap[modName].methodList.push(methodName);
                 }
             }
@@ -155,28 +155,33 @@ export class RpcServer {
     }
 
     /**
-     * 启动子进程, 将rpcModuleMap发送到子进程去生成express路由
+     * 启动子进程, 将rpcModuleMap发送到子进程去生成服务器协议路由
      */
     startChildProcess (): void {
-        this.childPro = childProcess.fork(path.resolve(__dirname, './ChildExpress.js'));
-        this.childPro.send({ type: 'start', cmd: 'express', data: {
+        this.childPro = childProcess.fork(path.resolve(__dirname, './Child.js'));
+        this.childPro.send({ type: 'start', data: {
             rpcModuleMap: this.rpcModuleMap, 
-            port: this.port, 
-            route: this.getAllRpcMethodRoute
+            route: this.getAllRpcMethodRoute,
+            protocol: this.protocol,
+            port: this.protocol == ProtocolTypes.http ? this.httpPort : this.wsPort
         }});
         this.childPro.on('message', this.onMessage.bind(this));
-        this.childPro.on('error', this.onError.bind(this));
+        this.childPro.on('error', this.onExit.bind(this));
         this.childPro.on('exit', this.onExit.bind(this));
     }
 
     onMessage (message: IProcessMsg<any>): void {
         console.log('收到子进程消息:', message);
+        if (message.type === 'start') {
+            console.log('子进程 rpc服务器启动成功');
+        }
     }
 
-    onError(err: Error): void {
-        console.log('子进程错误:', err);
-        if (this.childPro && this.childPro.kill) {
-            this.childPro.kill();
+    onExit(info: number | Error, signal: string): void {
+        console.log('子进程退出:', info, signal);
+        if (signal) {
+            console.log(`子进程收到信号 ${signal} 退出`);
+            return;
         }
         if (++this.haveTryTimes < this.maxTryTimes) {
             this.startChildProcess();
@@ -185,15 +190,7 @@ export class RpcServer {
         }
     }
 
-    onExit(code: number): void {
-        console.log('子进程退出:', code);
-        if (this.childPro && this.childPro.kill) {
-            this.childPro.kill();
-        }
-        if (++this.haveTryTimes < this.maxTryTimes) {
-            this.startChildProcess();
-        } else {
-            console.error(`Server: 子进程已达最大重启次数, 仍未正常启动`)
-        }
+    close() {
+        this.childPro && this.childPro.kill();
     }
 }

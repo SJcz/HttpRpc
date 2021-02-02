@@ -1,37 +1,28 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var request = require("request");
-function sleep(time) {
-    var promise = new Promise(function (resolve, reject) {
-        setTimeout(function () {
-            resolve(undefined);
-        }, time);
-    });
-    return promise;
-}
-exports.sleep = sleep;
+const request = require("request");
 function promiseRequest(options) {
-    var promiseReturn = { statusCode: -1 };
-    return new Promise(function (resolve, reject) {
+    return new Promise((resolve, reject) => {
         try {
-            request(options, function (err, res, body) {
+            request(options, (err, res, body) => {
                 if (err) {
-                    promiseReturn.msg = err.message;
-                    return resolve(promiseReturn);
+                    return reject(err.stack);
                 }
                 if (res.statusCode !== 200) {
-                    promiseReturn.msg = 'Rpc 服务器没有返回正确的状态码';
-                    return resolve(promiseReturn);
+                    return reject(body || 'Rpc 服务器没有返回正确的状态码');
                 }
-                promiseReturn.statusCode = 200;
-                promiseReturn.data = JSON.parse(body);
-                return resolve(promiseReturn);
+                try {
+                    typeof body == 'string' && (body = JSON.parse(body));
+                }
+                catch (err) {
+                }
+                return resolve(body.data);
             });
         }
         catch (e) {
-            promiseReturn.msg = e.message;
-            resolve(promiseReturn);
+            reject(e.stack);
         }
     });
 }
 exports.promiseRequest = promiseRequest;
+//# sourceMappingURL=Util.js.map
