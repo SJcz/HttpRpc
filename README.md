@@ -33,7 +33,9 @@ rpcServer.times(5); // 设置 提供rpc服务的子进程最大尝试重启次�
 // 服务器会自动扫描改文件夹下所有js文件, 然后自动生成rpc路由.
 // -- 如下是扫描remote文件夹, 并且仅扫描 'Remote'(默认, 通过 prefix 函数修改) 开头的文件 -- 
 // 返回该rpc服务器对象
-rpcServer.initRpcServer(path.resolve(__dirname, '../remote')) 
+rpcServer.initRpcServer(path.resolve(__dirname, '../remote'), function () {
+    console.log(启动rpc服务器成功);
+}) 
 
 ```
 
@@ -173,9 +175,13 @@ export = new Test();
 
 // test.ts
 // 启动 RPC http 服务器
-RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'));
+RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'), function () {
+ console.log(启动rpc服务器成功);
+});
 // 启动RPC websocket 服务器
-RpcServer.getInstance().serverType(2).initRpcServer(path.resolve(__dirname, '../remote'));
+RpcServer.getInstance().serverType(2).initRpcServer(path.resolve(__dirname, '../remote')), function () {
+ console.log(启动rpc服务器成功);
+});
 
 // 初始化RPC http 客户端
 RpcClient.getInstance().initClient('http://localhost:10008');
