@@ -50,21 +50,6 @@ static genProxy(client: RpcClient, mod: string, method: string) {
 
 // rpcFunction 方法的实质就是发送请求发服务器
 rpcFunction (moduleName: string, method: string, ...params: any): Promise<any> {
-        if(!this.connected) {
-            return Promise.reject(new Error('RpcClient: RpcClient is not connected.'));
-        }
-        if (!this.rpcModuleMap[moduleName]) {
-            return Promise.reject(new Error(`RpcClient: RpcServer not provide module: ${moduleName}, please comfrim RpcClient initialize success or RpcServer own this module`));
-        }
-        if (Object.prototype.toString.call(this.rpcModuleMap[moduleName].methodList) !== '[object Array]') {
-            return Promise.reject(new Error(`RpcClient: methodList of module ${moduleName} by RpcServer is not an array!!!`));
-        }
-        if (this.rpcModuleMap[moduleName].methodList.indexOf(method) === -1) {
-            return Promise.reject(new Error(`RpcClient: module ${moduleName} no such function: ${method}`));
-        }
-        if (this._protocol === ProtocolTypes.webSocket && !this._socket) {
-            return Promise.reject(new Error(`RpcClient: client socket is not initialized.`))
-        }
         return this.sendRequest(`${moduleName}/${method}`, params);
 }
 
@@ -82,7 +67,6 @@ private sendRequest(route: string, params: any): Promise<any> {
                 body: params
             });
         } else {
-           
             return new Promise((resolve, reject) => {
                 const index = this._reqIdIndex++;
                 const reqMsg = {
@@ -97,12 +81,73 @@ private sendRequest(route: string, params: any): Promise<any> {
     }
 ```
 #### 用法
+```
+rpc属性是rpc客户端暴露出来的一个对象, 结构如下:  
+{
+    模块A: {
+        方法A: rpcFunction,
+        方法B: rpcFunction
+    },
+    模块B: {
+        方法A: rpcFunction,
+        方法B: rpcFunction
+    }
+}
 
-#### 支持
-基于http, 支持同步和异步rpc调用
 
-#### 实现 rpcClient.rpc.模块.方法() 调用形式
+const rpcClient = RpcClient.getInstance() // 获取rpc 客户端单例
+
+const rpcClient = new RpcClient() // 新建一个rpc客户端
+
+rpcClient.serverType()  // 获取 rpc 客户端使用的服务器类型. 1 = http, websocket = 2. 默认 1
+rpcClient.serverType(2) //  设置rpc客户端使用的 服务器类型 
+
+// 初始化连接, 返回的是一个promise对象
+rpcClient.initClient('http://localhost:10008'); // 连接到 http rpc 服务器.
+rpcClient.serverType(2).initClient('ws://localhost:10009'); // 连接到 websocket rpc 服务器.
+
+// 调用
+rpcClient.rpc.Test.addNumber(1, 2) // 返回Promise
+
+```
+
+#### 同步异步
+rpc方法返回的是一个Promise实例, 所以支持异步调用.  
+rpcClient.rpc.Test.addNumber(1, 2).then().catch  
+或者  
+await rpcClient.rpc.Test.addNumber(1, 2)  
+
+#### 实现了 rpcClient.rpc.模块.方法() 调用形式
 设置了 TypeScript 远程调用接口, 支持 rpcClient.rpc.模块.方法() rpc调用
+
+### 带扫描的RPC文件
+存在几点要求
+1. 仅支持导出对象, 暂不支持直接导出class. 
+2. 对于 TypeScript 文件, 定义的对象均需要挂载到 RpcModule 接口, 方便写代码时自动提示和导入. 如果是js文件则无要求.
+3. 该类文件支持 ES5/ES6 写法, 需要注意的是, 因为ES6的类内部函数不可枚举, 所以都是从原型上获取这些函数名.
+```
+declare global {
+    interface RpcModule {
+        Test?: RemoterClass<Test>
+    }
+}
+
+class Test {
+    addNumber (a: number, b: number): number {
+        return a + b;
+    }
+
+    addString (a: string, b: string): string {
+        return a + b;
+    }
+
+    addJson (json): any {
+        return json;
+    }
+}
+
+export = new Test();
+```
 
 #### 使用
 * 代码编译在js文件夹中 
@@ -111,26 +156,32 @@ private sendRequest(route: string, params: any): Promise<any> {
 #### 示例
 ````
 // RemoteTest.ts
-declare global {
-    interface RpcModule {
-        Test?: RemoterClass<Test>;
-    }
-}
-
 class Test {
-    add (a: number, b: number): number {
+    addNumber (a: number, b: number): number {
         return a + b;
     }
-}
 
+    addString (a: string, b: string): string {
+        return a + b;
+    }
+
+    addJson (json): any {
+        return json;
+    }
+}
 export = new Test();
 
 // test.ts
-// 启动RPC服务器
+// 启动 RPC http 服务器
 RpcServer.getInstance().initRpcServer(path.resolve(__dirname, '../remote'));
+// 启动RPC websocket 服务器
+RpcServer.getInstance().serverType(2).initRpcServer(path.resolve(__dirname, '../remote'));
 
-// 初始化RPC客户端
+// 初始化RPC http 客户端
 RpcClient.getInstance().initClient('http://localhost:10008');
+
+// 初始化RPC websocket 客户端
+RpcClient.getInstance().serverType(2).initClient('ws://localhost:10009');
 
 // 同步使用
 await rpcClient.rpc.Test.add(1, 2);
