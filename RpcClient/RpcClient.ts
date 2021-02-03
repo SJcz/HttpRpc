@@ -99,7 +99,7 @@ export class RpcClient {
         }
     }
 
-    initProxy(): RpcClient {
+    private initProxy(): RpcClient {
         for (let mod in this.rpcModuleMap) {
             for (let method of this.rpcModuleMap[mod].methodList) {
                 ClientProxy.genProxy(this, mod, method);

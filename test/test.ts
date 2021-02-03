@@ -14,12 +14,16 @@ describe('#RpcServer.js', () => {
     describe('#httpServer', () => {
         it('create http rpc server no error', () => {
             assert.doesNotThrow(() => {
-                httpRpcServer = new RpcServer().initRpcServer(path.resolve(__dirname, '../remote'))
+                httpRpcServer = (<RpcServer>new RpcServer().prefix('AB')).initRpcServer(path.resolve(__dirname, '../remote'), () => {
+                    console.warn(`ssssssssssssssssssssssssssssssssssssssssssss`);
+                })
             }, Error);
         });
         it('create web socket rpc server no error', () => {
             assert.doesNotThrow(() => {
-                wsRpcServer = (<RpcServer>new RpcServer().serverType(2)).initRpcServer(path.resolve(__dirname, '../remote'))
+                wsRpcServer = (<RpcServer>new RpcServer().serverType(2)).initRpcServer(path.resolve(__dirname, '../remote'), () => {
+                    console.warn(`rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr`);
+                })
             }, Error);
         });
     });
@@ -77,6 +81,26 @@ describe('#RpcServer.js', () => {
     });
 });
 
+// const rpcServer = new RpcServer();
+// rpcServer.prefix();
+// rpcServer.prefix('ABC');
+
+// rpcServer.serverType()  // 获取 rpc 服务器类型
+// rpcServer.serverType(2) //  设置rpc服务器类型 1 = http, websocket = 2. 默认 1
+
+// rpcServer.port(); // 获取 rpc 服务器的端口
+// rpcServer.port(10010) // 设置rpc服务器端口. 默认 http = 10008, websocket = 10009
+
+// rpcServer.rpcMethodRoute() // 获取供RPC客户端调用的 ·服务端所有rpc方法· 的路由
+// rpcServer.rpcMethodRoute('RpcServer/getAll') // 设置该路由. 默认是 RpcServer/GetAllRpcMethod
+
+// rpcServer.times(); // 获取 提供rpc服务的子进程最大尝试重启次数 默认 3 
+// rpcServer.times(5); // 设置 提供rpc服务的子进程最大尝试重启次数
+
+// rpcServer.initRpcServer(path.resolve(__dirname, '../remote')) // 初始化和启动rpc服务器, 传入一个要扫描的绝对路径文件夹
+
+// const rpcClient = new RpcClient() // 新建一个rpc客户端
+// rpcClient.serverType();
 
 // 启动RPC服务器
 

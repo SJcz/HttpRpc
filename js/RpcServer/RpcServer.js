@@ -77,11 +77,10 @@ class RpcServer {
             return this.maxTryTimes;
         }
     }
-    initRpcServer(folder) {
+    initRpcServer(folder, cb) {
         if (!folder) {
             throw new Error('not specified folder, please specify a basic rpc scan floder');
         }
-        folder = path.resolve(folder);
         if (/^\.+/.test(folder)) {
             throw new Error('please provide absolute path like \\alida\\remote or D:\\remote or /remote ');
         }
@@ -91,7 +90,7 @@ class RpcServer {
         }
         this.scanRpcFolder(folder);
         this.generateRpcMethodMap();
-        this.startChildProcess();
+        this.startChildProcess(cb);
         return this;
     }
     scanRpcFolder(folder) {
@@ -111,7 +110,7 @@ class RpcServer {
         for (let filePath of this.scanFiles) {
             const modName = path.basename(filePath).replace(/\.(js)|(jsx)$/, '').substr(this.fileNamePrefix.length);
             if (modName === '') {
-                throw new Error(`generateRpcMethodMap: ${filePath} is not a valid rpc file.`);
+                console.warn(`generateRpcMethodMap: ${filePath} is not a valid rpc file.`);
             }
             let modObj = require(filePath);
             if (!modObj) {
@@ -127,7 +126,7 @@ class RpcServer {
             }
         }
     }
-    startChildProcess() {
+    startChildProcess(cb) {
         this.childPro = childProcess.fork(path.resolve(__dirname, './Child.js'));
         this.childPro.send({ type: 'start', data: {
                 rpcModuleMap: this.rpcModuleMap,
@@ -135,14 +134,15 @@ class RpcServer {
                 protocol: this.protocol,
                 port: this.protocol == Define_1.ProtocolTypes.http ? this.httpPort : this.wsPort
             } });
-        this.childPro.on('message', this.onMessage.bind(this));
+        this.childPro.on('message', this.onMessage.bind(this, cb));
         this.childPro.on('error', this.onExit.bind(this));
         this.childPro.on('exit', this.onExit.bind(this));
     }
-    onMessage(message) {
+    onMessage(cb, message) {
         console.log('收到子进程消息:', message);
         if (message.type === 'start') {
             console.log('子进程 rpc服务器启动成功');
+            cb && cb();
         }
     }
     onExit(info, signal) {

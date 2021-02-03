@@ -21,12 +21,16 @@ describe('#RpcServer.js', () => {
     describe('#httpServer', () => {
         it('create http rpc server no error', () => {
             assert.doesNotThrow(() => {
-                httpRpcServer = new RpcServer_1.RpcServer().initRpcServer(path.resolve(__dirname, '../remote'));
+                httpRpcServer = new RpcServer_1.RpcServer().prefix('AB').initRpcServer(path.resolve(__dirname, '../remote'), () => {
+                    console.warn(`ssssssssssssssssssssssssssssssssssssssssssss`);
+                });
             }, Error);
         });
         it('create web socket rpc server no error', () => {
             assert.doesNotThrow(() => {
-                wsRpcServer = new RpcServer_1.RpcServer().serverType(2).initRpcServer(path.resolve(__dirname, '../remote'));
+                wsRpcServer = new RpcServer_1.RpcServer().serverType(2).initRpcServer(path.resolve(__dirname, '../remote'), () => {
+                    console.warn(`rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr`);
+                });
             }, Error);
         });
     });

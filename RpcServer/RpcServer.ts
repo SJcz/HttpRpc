@@ -2,7 +2,7 @@ import path = require('path');
 import fs = require('fs');
 import childProcess = require('child_process');
 import { IModuleIntroduce, IProcessMsg, ProtocolTypes } from './lib/Define';
-import { isUndefined } from 'underscore';
+import { countBy, isUndefined } from 'underscore';
 
 export class RpcServer {
     public rpcModuleMap: { [moduleName: string]: IModuleIntroduce } = {};
@@ -94,11 +94,10 @@ export class RpcServer {
      * 传入的路径应该是一个绝对路径
      * @param folder
      */
-    initRpcServer (folder?: string): RpcServer {
+    initRpcServer (folder: string, cb?: Function): RpcServer {
         if (!folder) {
             throw new Error('not specified folder, please specify a basic rpc scan floder');
         }
-        folder = path.resolve(folder);
         if (/^\.+/.test(folder)) {
             throw new Error('please provide absolute path like \\alida\\remote or D:\\remote or /remote ');
         }
@@ -108,7 +107,7 @@ export class RpcServer {
         }
         this.scanRpcFolder(folder);
         this.generateRpcMethodMap();
-        this.startChildProcess();
+        this.startChildProcess(cb);
         return this;
     }
 
@@ -116,7 +115,7 @@ export class RpcServer {
      * 扫描指定文件夹下的指定名字和后缀的文件, .js .jsx
      * @param folder
      */
-    scanRpcFolder (folder: string): void {
+    private scanRpcFolder (folder: string): void {
         const files = fs.readdirSync(folder);
         for (let file of files) {
             const filePath = path.resolve(folder, file);
@@ -130,14 +129,14 @@ export class RpcServer {
     /**
      * 根据扫描的结果文件，生成rpc模块和方法列表的map对象
      */
-    generateRpcMethodMap (): void {
+    private generateRpcMethodMap (): void {
         if (this.scanFiles.length === 0) {
             console.warn('RpcServer: there is no any rpc file provide');
         }
         for (let filePath of this.scanFiles) {
             const modName = path.basename(filePath).replace(/\.(js)|(jsx)$/, '').substr(this.fileNamePrefix.length);
             if (modName === '') {
-                throw new Error(`generateRpcMethodMap: ${filePath} is not a valid rpc file.`);
+                console.warn(`generateRpcMethodMap: ${filePath} is not a valid rpc file.`);
             }
             let modObj = require(filePath);
             if (!modObj) {
@@ -157,7 +156,7 @@ export class RpcServer {
     /**
      * 启动子进程, 将rpcModuleMap发送到子进程去生成服务器协议路由
      */
-    startChildProcess (): void {
+    private startChildProcess (cb?: Function): void {
         this.childPro = childProcess.fork(path.resolve(__dirname, './Child.js'));
         this.childPro.send({ type: 'start', data: {
             rpcModuleMap: this.rpcModuleMap, 
@@ -165,19 +164,20 @@ export class RpcServer {
             protocol: this.protocol,
             port: this.protocol == ProtocolTypes.http ? this.httpPort : this.wsPort
         }});
-        this.childPro.on('message', this.onMessage.bind(this));
+        this.childPro.on('message', this.onMessage.bind(this, cb));
         this.childPro.on('error', this.onExit.bind(this));
         this.childPro.on('exit', this.onExit.bind(this));
     }
 
-    onMessage (message: IProcessMsg<any>): void {
+    private onMessage (cb: Function, message: IProcessMsg<any>): void {
         console.log('收到子进程消息:', message);
         if (message.type === 'start') {
             console.log('子进程 rpc服务器启动成功');
+            cb && cb();
         }
     }
 
-    onExit(info: number | Error, signal: string): void {
+    private onExit(info: number | Error, signal: string): void {
         console.log('子进程退出:', info, signal);
         if (signal) {
             console.log(`子进程收到信号 ${signal} 退出`);
