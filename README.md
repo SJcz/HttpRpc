@@ -1,4 +1,4 @@
-# RpcDemo
+# HttpRpc
 一个基于 HTTP/webSocket 实现的简单rpc 框架, 包含客户端和服务端
 ### 服务端
 #### 原理     
